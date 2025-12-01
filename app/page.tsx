@@ -1,10 +1,50 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { ethers } from "ethers";
 
 import { doctorSignPrescription } from "@/lib/prescription/signature";
 import { getPrescriptionContract, mintPrescription } from "@/lib/prescription/contract";
+
+const COMMON_MEDICATIONS = [
+  "Acetaminophen",
+  "Amoxicillin",
+  "Aspirin",
+  "Atorvastatin",
+  "Azithromycin",
+  "Ciprofloxacin",
+  "Clopidogrel",
+  "Doxycycline",
+  "Gabapentin",
+  "Hydrocodone",
+  "Ibuprofen",
+  "Lisinopril",
+  "Losartan",
+  "Metformin",
+  "Metoprolol",
+  "Omeprazole",
+  "Oxycodone",
+  "Pantoprazole",
+  "Prednisone",
+  "Sertraline",
+  "Simvastatin",
+  "Tramadol",
+  "Trazodone",
+  "Warfarin",
+  "Albuterol",
+  "Amlodipine",
+  "Citalopram",
+  "Diazepam",
+  "Fluoxetine",
+  "Levothyroxine",
+  "Lorazepam",
+  "Montelukast",
+  "Metronidazole",
+  "Sildenafil",
+  "Tamsulosin",
+  "Venlafaxine",
+  "Zolpidem",
+];
 
 interface Patient {
   id: string;
@@ -21,13 +61,49 @@ export default function PrescriptionDashboard() {
     { id: "2", name: "Jane Smith", dob: "03/22/1990", address: "456 Oak Ave, City, State 12345" },
     { id: "3", name: "Bob Johnson", dob: "07/10/1978", address: "789 Pine Rd, City, State 12345" },
   ]);
+  const [numPrescriptions, setNumPrescriptions] = useState(patients.length);
 
   // Prescription form state
   const [patientName, setPatientName] = useState("");
   const [patientId, setPatientId] = useState("");
   const [medication, setMedication] = useState("");
+  const [medicationSearch, setMedicationSearch] = useState("");
+  const [showMedicationDropdown, setShowMedicationDropdown] = useState(false);
   const [amount, setAmount] = useState(50);
   const [notes, setNotes] = useState("");
+  const medicationInputRef = useRef<HTMLDivElement>(null);
+
+  // Filter medications based on search
+  const filteredMedications = COMMON_MEDICATIONS.filter((med) =>
+    med.toLowerCase().includes(medicationSearch.toLowerCase())
+  );
+
+  // Handle clicks outside the dropdown
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        medicationInputRef.current &&
+        !medicationInputRef.current.contains(event.target as Node)
+      ) {
+        setShowMedicationDropdown(false);
+      }
+    }
+
+    if (showMedicationDropdown) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [showMedicationDropdown]);
+
+  // Handle medication selection
+  const handleMedicationSelect = (med: string) => {
+    setMedication(med);
+    setMedicationSearch(med);
+    setShowMedicationDropdown(false);
+  };
 
   async function handleMint() {
     setLoading(true);
@@ -98,9 +174,12 @@ export default function PrescriptionDashboard() {
       setPatientName("");
       setPatientId("");
       setMedication("");
+      setMedicationSearch("");
       setAmount(50);
       setNotes("");
+      setShowMedicationDropdown(false);
       setShowModal(false);
+      setNumPrescriptions(numPrescriptions + 1);
     } catch (error) {
       console.error("Error minting prescription:", error);
       alert(`Error: ${error instanceof Error ? error.message : "Unknown error"}`);
@@ -180,7 +259,7 @@ export default function PrescriptionDashboard() {
             <div className="space-y-4">
               <div>
                 <p className="text-gray-400 text-sm">Total Prescriptions</p>
-                <p className="text-3xl font-bold text-[#00ff88]">{patients.length}</p>
+                <p className="text-3xl font-bold text-[#00ff88]">{ numPrescriptions }</p>
               </div>
               <div>
                 <p className="text-gray-400 text-sm">Active Patients</p>
@@ -221,12 +300,17 @@ export default function PrescriptionDashboard() {
               </div>
 
               {/* Medication */}
-              <div className="relative">
+              <div className="relative" ref={medicationInputRef}>
                 <input
                   type="text"
-                  placeholder="Medication"
-                  value={medication}
-                  onChange={(e) => setMedication(e.target.value)}
+                  placeholder="Search medication..."
+                  value={medicationSearch}
+                  onChange={(e) => {
+                    setMedicationSearch(e.target.value);
+                    setMedication(e.target.value);
+                    setShowMedicationDropdown(true);
+                  }}
+                  onFocus={() => setShowMedicationDropdown(true)}
                   className="w-full bg-[#252525] border border-gray-700 rounded-lg px-4 py-3 pr-10 text-white placeholder-gray-500 focus:outline-none focus:border-[#00ff88]"
                 />
                 <svg
@@ -242,6 +326,25 @@ export default function PrescriptionDashboard() {
                     d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
                   />
                 </svg>
+                {showMedicationDropdown && filteredMedications.length > 0 && (
+                  <div className="absolute z-50 w-full mt-1 bg-[#252525] border border-gray-700 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    {filteredMedications.map((med) => (
+                      <button
+                        key={med}
+                        type="button"
+                        onClick={() => handleMedicationSelect(med)}
+                        className="w-full text-left px-4 py-2 text-white hover:bg-[#1a1a1a] transition-colors first:rounded-t-lg last:rounded-b-lg"
+                      >
+                        {med}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {showMedicationDropdown && medicationSearch && filteredMedications.length === 0 && (
+                  <div className="absolute z-50 w-full mt-1 bg-[#252525] border border-gray-700 rounded-lg shadow-lg px-4 py-3 text-gray-400">
+                    No medications found
+                  </div>
+                )}
               </div>
 
               {/* Amount Slider */}
@@ -278,8 +381,10 @@ export default function PrescriptionDashboard() {
                   setPatientName("");
                   setPatientId("");
                   setMedication("");
+                  setMedicationSearch("");
                   setAmount(50);
                   setNotes("");
+                  setShowMedicationDropdown(false);
                 }}
                 className="flex-1 px-6 py-3 bg-[#252525] text-white rounded-lg hover:bg-[#2a2a2a] transition-colors"
               >
