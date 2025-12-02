@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { ethers } from "ethers";
 
 import { doctorSignPrescription } from "@/lib/prescription/signature";
@@ -54,10 +53,21 @@ interface Patient {
   address: string;
 }
 
+interface ReceiptData {
+  tokenId: string | null;
+  patientName: string;
+  patientId: string;
+  medication: string;
+  dosage: string;
+  instructions: string;
+  date: string;
+}
+
 export default function PrescriptionDashboard() {
-  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
   const [patients] = useState<Patient[]>([
     { id: "1", name: "John Doe", dob: "01/15/1985", address: "123 Main St, City, State 12345" },
     { id: "2", name: "Jane Smith", dob: "03/22/1990", address: "456 Oak Ave, City, State 12345" },
@@ -202,6 +212,20 @@ export default function PrescriptionDashboard() {
         tokenId = parsed?.args[1]?.toString();
       }
 
+      // Update prescription count
+      setNumPrescriptions(numPrescriptions + 1);
+
+      // Store receipt data and show success view
+      setReceiptData({
+        tokenId: tokenId,
+        patientName: selectedPatient?.name || "",
+        patientId: selectedPatient?.id || "",
+        medication: medication || "",
+        dosage: `${amount}mg`,
+        instructions: notes || "",
+        date: new Date().toLocaleString(),
+      });
+
       // Reset form and close modal
       setSelectedPatient(null);
       setMedication("");
@@ -212,20 +236,9 @@ export default function PrescriptionDashboard() {
       setShowMedicationDropdown(false);
       setShowPatientDropdown(false);
       setShowModal(false);
-      setNumPrescriptions(numPrescriptions + 1);
 
-      // Redirect to success page with receipt data
-      const params = new URLSearchParams({
-        tokenId: tokenId || "",
-        patientName: selectedPatient?.name || "",
-        patientId: selectedPatient?.id || "",
-        medication: medication || "",
-        dosage: `${amount}mg`,
-        instructions: notes || "",
-        date: new Date().toLocaleString(),
-      });
-
-      router.push(`/success?${params.toString()}`);
+      // Show success view
+      setShowSuccess(true);
     } catch (error) {
       console.error("Error minting prescription:", error);
       alert(`Error: ${error instanceof Error ? error.message : "Unknown error"}`);
@@ -234,6 +247,133 @@ export default function PrescriptionDashboard() {
     }
   }
 
+  // Show success/receipt view
+  if (showSuccess && receiptData) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0a] text-white p-6">
+        <div className="max-w-4xl mx-auto">
+          {/* Success Header */}
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center justify-center w-20 h-20 bg-[#00ff88] rounded-full mb-4">
+              <svg
+                className="w-10 h-10 text-black"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M5 13l4 4L19 7"
+                />
+              </svg>
+            </div>
+            <h1 className="text-4xl font-bold mb-2">Prescription Minted Successfully!</h1>
+            <p className="text-gray-400">Your prescription has been created and stored on-chain</p>
+          </div>
+
+          {/* Receipt Card */}
+          <div className="bg-[#1a1a1a] rounded-lg border border-gray-800 p-8 mb-6">
+            <div className="border-b border-gray-700 pb-4 mb-6">
+              <h2 className="text-2xl font-semibold mb-2">Prescription Receipt</h2>
+              <p className="text-gray-400 text-sm">Transaction Date: {receiptData.date}</p>
+            </div>
+
+            <div className="space-y-6">
+              {/* Token ID Section */}
+              {receiptData.tokenId && (
+                <div className="bg-[#252525] rounded-lg p-4 border border-gray-700">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-400 mb-1">NFT Token ID</p>
+                      <p className="text-xl font-mono font-semibold text-[#00ff88]">{receiptData.tokenId}</p>
+                    </div>
+                    <div className="px-3 py-1 bg-[#00ff88] bg-opacity-20 text-[#00ff88] rounded-lg text-sm font-medium">
+                      On-Chain
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Patient Information */}
+              <div>
+                <h3 className="text-lg font-semibold mb-3 text-gray-300">Patient Information</h3>
+                <div className="bg-[#252525] rounded-lg p-4 space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Name:</span>
+                    <span className="font-medium">{receiptData.patientName || "N/A"}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Patient ID:</span>
+                    <span className="font-medium">{receiptData.patientId || "N/A"}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Prescription Details */}
+              <div>
+                <h3 className="text-lg font-semibold mb-3 text-gray-300">Prescription Details</h3>
+                <div className="bg-[#252525] rounded-lg p-4 space-y-3">
+                  <div className="flex justify-between items-start">
+                    <span className="text-gray-400">Medication:</span>
+                    <span className="font-medium text-right">{receiptData.medication || "N/A"}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Dosage:</span>
+                    <span className="font-medium">{receiptData.dosage || "N/A"}</span>
+                  </div>
+                  {receiptData.instructions && (
+                    <div className="pt-2 border-t border-gray-700">
+                      <p className="text-gray-400 mb-2">Instructions:</p>
+                      <p className="text-gray-300 whitespace-pre-wrap">{receiptData.instructions}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Doctor Information */}
+              <div>
+                <h3 className="text-lg font-semibold mb-3 text-gray-300">Prescribing Physician</h3>
+                <div className="bg-[#252525] rounded-lg p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center text-white font-semibold">
+                      CD
+                    </div>
+                    <div>
+                      <p className="font-medium">Dr. Charlie Doherty</p>
+                      <p className="text-sm text-gray-400">Licensed Physician</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Receipt Footer */}
+            <div className="mt-6 pt-6 border-t border-gray-700">
+              <p className="text-xs text-gray-500 text-center">
+                This prescription has been securely stored on the blockchain as an NFT.
+                <br />
+                The token ID above can be used to verify and access this prescription.
+              </p>
+            </div>
+          </div>
+
+          {/* Back Button */}
+          <div className="flex justify-center">
+            <button
+              onClick={() => setShowSuccess(false)}
+              className="px-8 py-3 bg-[#00ff88] text-black rounded-lg hover:bg-[#00e677] transition-colors font-medium text-lg"
+            >
+              Back to Dashboard
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show dashboard view
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white p-6">
       <div className="max-w-7xl mx-auto">
