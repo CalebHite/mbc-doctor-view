@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { ethers } from "ethers";
 
 import { doctorSignPrescription } from "@/lib/prescription/signature";
@@ -54,6 +55,7 @@ interface Patient {
 }
 
 export default function PrescriptionDashboard() {
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [patients] = useState<Patient[]>([
@@ -64,21 +66,23 @@ export default function PrescriptionDashboard() {
   const [numPrescriptions, setNumPrescriptions] = useState(patients.length);
 
   // Prescription form state
-  const [patientName, setPatientName] = useState("");
-  const [patientId, setPatientId] = useState("");
+  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
+  const [showPatientDropdown, setShowPatientDropdown] = useState(false);
   const [medication, setMedication] = useState("");
   const [medicationSearch, setMedicationSearch] = useState("");
   const [showMedicationDropdown, setShowMedicationDropdown] = useState(false);
   const [amount, setAmount] = useState(50);
+  const [amountInput, setAmountInput] = useState("50");
   const [notes, setNotes] = useState("");
   const medicationInputRef = useRef<HTMLDivElement>(null);
+  const patientDropdownRef = useRef<HTMLDivElement>(null);
 
   // Filter medications based on search
   const filteredMedications = COMMON_MEDICATIONS.filter((med) =>
     med.toLowerCase().includes(medicationSearch.toLowerCase())
   );
 
-  // Handle clicks outside the dropdown
+  // Handle clicks outside the dropdowns
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (
@@ -87,16 +91,22 @@ export default function PrescriptionDashboard() {
       ) {
         setShowMedicationDropdown(false);
       }
+      if (
+        patientDropdownRef.current &&
+        !patientDropdownRef.current.contains(event.target as Node)
+      ) {
+        setShowPatientDropdown(false);
+      }
     }
 
-    if (showMedicationDropdown) {
+    if (showMedicationDropdown || showPatientDropdown) {
       document.addEventListener("mousedown", handleClickOutside);
     }
 
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [showMedicationDropdown]);
+  }, [showMedicationDropdown, showPatientDropdown]);
 
   // Handle medication selection
   const handleMedicationSelect = (med: string) => {
@@ -104,6 +114,30 @@ export default function PrescriptionDashboard() {
     setMedicationSearch(med);
     setShowMedicationDropdown(false);
   };
+
+  // Handle patient selection
+  const handlePatientSelect = (patient: Patient) => {
+    setSelectedPatient(patient);
+    setShowPatientDropdown(false);
+  };
+
+  // Handle amount input change
+  const handleAmountInputChange = (value: string) => {
+    setAmountInput(value);
+    const numValue = parseInt(value, 10);
+    if (!isNaN(numValue) && numValue >= 0 && numValue <= 1000) {
+      setAmount(numValue);
+    }
+  };
+
+  // Handle amount slider change
+  const handleAmountSliderChange = (value: number) => {
+    setAmount(value);
+    setAmountInput(value.toString());
+  };
+
+  // Check if form is valid
+  const isFormValid = selectedPatient && medication && notes && amount > 0;
 
   async function handleMint() {
     setLoading(true);
@@ -123,7 +157,7 @@ export default function PrescriptionDashboard() {
         throw new Error("Missing contract address. Please check your .env.local file.");
       }
 
-      if (!patientName || !medication || !notes) {
+      if (!selectedPatient || !medication || !notes || amount <= 0) {
         throw new Error("Please fill in all required fields");
       }
 
@@ -168,18 +202,30 @@ export default function PrescriptionDashboard() {
         tokenId = parsed?.args[1]?.toString();
       }
 
-      alert(`Prescription minted successfully!${tokenId ? ` Token ID: ${tokenId}` : ""}`);
-      
       // Reset form and close modal
-      setPatientName("");
-      setPatientId("");
+      setSelectedPatient(null);
       setMedication("");
       setMedicationSearch("");
       setAmount(50);
+      setAmountInput("50");
       setNotes("");
       setShowMedicationDropdown(false);
+      setShowPatientDropdown(false);
       setShowModal(false);
       setNumPrescriptions(numPrescriptions + 1);
+
+      // Redirect to success page with receipt data
+      const params = new URLSearchParams({
+        tokenId: tokenId || "",
+        patientName: selectedPatient?.name || "",
+        patientId: selectedPatient?.id || "",
+        medication: medication || "",
+        dosage: `${amount}mg`,
+        instructions: notes || "",
+        date: new Date().toLocaleString(),
+      });
+
+      router.push(`/success?${params.toString()}`);
     } catch (error) {
       console.error("Error minting prescription:", error);
       alert(`Error: ${error instanceof Error ? error.message : "Unknown error"}`);
@@ -227,8 +273,7 @@ export default function PrescriptionDashboard() {
                       key={patient.id}
                       className="border-b border-gray-800 hover:bg-[#2a2a2a] cursor-pointer transition-colors"
                       onClick={() => {
-                        setPatientName(patient.name);
-                        setPatientId(patient.id);
+                        setSelectedPatient(patient);
                         setShowModal(true);
                       }}
                     >
@@ -277,100 +322,146 @@ export default function PrescriptionDashboard() {
             <h2 className="text-3xl font-bold mb-6">New Prescription</h2>
 
             <div className="space-y-4">
-              {/* Patient Name */}
-              <div>
-                <input
-                  type="text"
-                  placeholder="Patient Name"
-                  value={patientName}
-                  onChange={(e) => setPatientName(e.target.value)}
-                  className="w-full bg-[#252525] border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-[#00ff88]"
-                />
-              </div>
-
-              {/* Patient ID */}
-              <div>
-                <input
-                  type="text"
-                  placeholder="Patient ID Number"
-                  value={patientId}
-                  onChange={(e) => setPatientId(e.target.value)}
-                  className="w-full bg-[#252525] border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-[#00ff88]"
-                />
-              </div>
-
-              {/* Medication */}
-              <div className="relative" ref={medicationInputRef}>
-                <input
-                  type="text"
-                  placeholder="Search medication..."
-                  value={medicationSearch}
-                  onChange={(e) => {
-                    setMedicationSearch(e.target.value);
-                    setMedication(e.target.value);
-                    setShowMedicationDropdown(true);
-                  }}
-                  onFocus={() => setShowMedicationDropdown(true)}
-                  className="w-full bg-[#252525] border border-gray-700 rounded-lg px-4 py-3 pr-10 text-white placeholder-gray-500 focus:outline-none focus:border-[#00ff88]"
-                />
-                <svg
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
+              {/* Patient Selection Dropdown */}
+              <div className="relative" ref={patientDropdownRef}>
+                <button
+                  type="button"
+                  onClick={() => setShowPatientDropdown(!showPatientDropdown)}
+                  className="w-full bg-[#252525] border border-gray-700 rounded-lg px-4 py-3 text-left text-white focus:outline-none focus:border-[#00ff88] flex items-center justify-between"
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                  />
-                </svg>
-                {showMedicationDropdown && filteredMedications.length > 0 && (
+                  <span className={selectedPatient ? "text-white" : "text-gray-500"}>
+                    {selectedPatient ? `${selectedPatient.name} (ID: ${selectedPatient.id})` : "Select Patient"}
+                  </span>
+                  <svg
+                    className={`w-5 h-5 text-gray-400 transition-transform ${showPatientDropdown ? "rotate-180" : ""}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {showPatientDropdown && (
                   <div className="absolute z-50 w-full mt-1 bg-[#252525] border border-gray-700 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                    {filteredMedications.map((med) => (
+                    {patients.map((patient) => (
                       <button
-                        key={med}
+                        key={patient.id}
                         type="button"
-                        onClick={() => handleMedicationSelect(med)}
-                        className="w-full text-left px-4 py-2 text-white hover:bg-[#1a1a1a] transition-colors first:rounded-t-lg last:rounded-b-lg"
+                        onClick={() => handlePatientSelect(patient)}
+                        className="w-full text-left px-4 py-3 text-white hover:bg-[#1a1a1a] transition-colors first:rounded-t-lg last:rounded-b-lg"
                       >
-                        {med}
+                        <div className="font-medium">{patient.name}</div>
+                        <div className="text-sm text-gray-400">ID: {patient.id} • DOB: {patient.dob}</div>
+                        <div className="text-sm text-gray-400">{patient.address}</div>
                       </button>
                     ))}
                   </div>
                 )}
-                {showMedicationDropdown && medicationSearch && filteredMedications.length === 0 && (
-                  <div className="absolute z-50 w-full mt-1 bg-[#252525] border border-gray-700 rounded-lg shadow-lg px-4 py-3 text-gray-400">
-                    No medications found
+                {/* Display selected patient info */}
+                {selectedPatient && (
+                  <div className="mt-2 p-3 bg-[#252525] border border-gray-700 rounded-lg">
+                    <div className="text-sm text-gray-300 space-y-1">
+                      <div><span className="text-gray-500">ID:</span> {selectedPatient.id}</div>
+                      <div><span className="text-gray-500">DOB:</span> {selectedPatient.dob}</div>
+                      <div><span className="text-gray-500">Address:</span> {selectedPatient.address}</div>
+                    </div>
                   </div>
                 )}
               </div>
 
-              {/* Amount Slider */}
-              <div>
-                <label className="block text-white mb-2">Amount: {amount}mg</label>
-                <input
-                  type="range"
-                  min="0"
-                  max="1000"
-                  step="10"
-                  value={amount}
-                  onChange={(e) => setAmount(Number(e.target.value))}
-                  className="w-full h-2 bg-[#252525] rounded-lg appearance-none cursor-pointer accent-[#00ff88]"
-                />
-              </div>
+              {/* Medication - Only show when patient is selected */}
+              {selectedPatient && (
+                <div className="relative" ref={medicationInputRef}>
+                  <input
+                    type="text"
+                    placeholder="Search medication..."
+                    value={medicationSearch}
+                    onChange={(e) => {
+                      setMedicationSearch(e.target.value);
+                      setMedication(e.target.value);
+                      setShowMedicationDropdown(true);
+                    }}
+                    onFocus={() => setShowMedicationDropdown(true)}
+                    className="w-full bg-[#252525] border border-gray-700 rounded-lg px-4 py-3 pr-10 text-white placeholder-gray-500 focus:outline-none focus:border-[#00ff88]"
+                  />
+                  <svg
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                    />
+                  </svg>
+                  {showMedicationDropdown && filteredMedications.length > 0 && (
+                    <div className="absolute z-50 w-full mt-1 bg-[#252525] border border-gray-700 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                      {filteredMedications.map((med) => (
+                        <button
+                          key={med}
+                          type="button"
+                          onClick={() => handleMedicationSelect(med)}
+                          className="w-full text-left px-4 py-2 text-white hover:bg-[#1a1a1a] transition-colors first:rounded-t-lg last:rounded-b-lg"
+                        >
+                          {med}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {showMedicationDropdown && medicationSearch && filteredMedications.length === 0 && (
+                    <div className="absolute z-50 w-full mt-1 bg-[#252525] border border-gray-700 rounded-lg shadow-lg px-4 py-3 text-gray-400">
+                      No medications found
+                    </div>
+                  )}
+                </div>
+              )}
 
-              {/* Notes */}
-              <div>
-                <textarea
-                  placeholder="Notes"
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  rows={4}
-                  className="w-full bg-[#252525] border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-[#00ff88] resize-none"
-                />
-              </div>
+              {/* Amount - Only show when medication is selected */}
+              {medication && (
+                <div>
+                  <label className="block text-white mb-2">Amount (mg)</label>
+                  <div className="flex gap-4 items-center">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      value={amountInput}
+                      onChange={(e) => handleAmountInputChange(e.target.value)}
+                      className="w-18 bg-[#252525] border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-[#00ff88] disabled:opacity-50"
+                    />
+                    <div className="flex-1 bg-[#252525] border border-gray-700 rounded-lg p-3">
+                      <input
+                        type="range"
+                        min="0"
+                        max="1000"
+                        step="10"
+                        value={amount}
+                        onChange={(e) => handleAmountSliderChange(Number(e.target.value))}
+                        className="w-full h-2 bg-[#1a1a1a] rounded-lg appearance-none cursor-pointer accent-[#00ff88]"
+                        style={{
+                          background: `linear-gradient(to right, #00ff88 0%, #00ff88 ${(amount / 1000) * 100}%, #1a1a1a ${(amount / 1000) * 100}%, #1a1a1a 100%)`
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Notes - Only show when medication is selected */}
+              {medication && (
+                <div>
+                  <textarea
+                    placeholder="Notes"
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    rows={4}
+                    className="w-full bg-[#252525] border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-[#00ff88] resize-none"
+                  />
+                </div>
+              )}
             </div>
 
             {/* Modal Actions */}
@@ -378,13 +469,14 @@ export default function PrescriptionDashboard() {
               <button
                 onClick={() => {
                   setShowModal(false);
-                  setPatientName("");
-                  setPatientId("");
+                  setSelectedPatient(null);
                   setMedication("");
                   setMedicationSearch("");
                   setAmount(50);
+                  setAmountInput("50");
                   setNotes("");
                   setShowMedicationDropdown(false);
+                  setShowPatientDropdown(false);
                 }}
                 className="flex-1 px-6 py-3 bg-[#252525] text-white rounded-lg hover:bg-[#2a2a2a] transition-colors"
               >
@@ -392,7 +484,7 @@ export default function PrescriptionDashboard() {
               </button>
               <button
                 onClick={handleMint}
-                disabled={loading}
+                disabled={loading || !isFormValid}
                 className="flex-1 px-6 py-3 bg-[#00ff88] text-black rounded-lg hover:bg-[#00e677] transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? "Minting..." : "Mint Prescription"}
