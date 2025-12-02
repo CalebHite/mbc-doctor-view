@@ -379,7 +379,7 @@ export default function PrescriptionDashboard() {
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-4xl font-bold mb-2">Dashboard</h1>
+          <h1 className="text-4xl font-bold mb-2">CompanyRX Dashboard</h1>
           <p className="text-gray-400">Manage patient prescriptions</p>
         </div>
 
@@ -428,11 +428,11 @@ export default function PrescriptionDashboard() {
 
             {/* User Profile */}
             <div className="mt-8 flex items-center gap-4">
-              <div className="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center text-white font-semibold">
-                CD
+              <div >
+                <img src="Dr Doherty.png" alt="Doctor Icon" className="w-12 h-12 rounded-full"/>
               </div>
               <div>
-                <p className="font-medium">Dr. Charlie Doherty</p>
+                <p className="font-medium">Dr. Charles Doherty</p>
                 <p className="text-sm text-gray-400">Licensed Physician</p>
               </div>
             </div>
